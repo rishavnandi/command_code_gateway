@@ -70,6 +70,13 @@ A missing key file substitutes an empty string, so opencode sends an empty
 Bearer and the router answers 401. If the provider authenticates as nobody,
 check the file exists before suspecting the tailnet.
 
+**The `models` block is required** — opencode will not call your router's
+`/v1/models`. Discovery is special-cased for Ollama, LM Studio and vLLM only.
+For any other OpenAI-compatible endpoint the docs say to list models
+explicitly. Without them the provider exists but nothing is selectable, and
+you get `Model unavailable: cc/<anything>`. List the handful you use, not all
+85 the bridge serves.
+
 ## Getting the keys
 
 `~/.commandcode/auth.json` holds one key at a time, so capture after each login

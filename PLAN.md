@@ -287,6 +287,15 @@ Then add the provider beside the existing `plugins` and `mcp` in
 
 `encoding: "none"` because gateways reject compressed bodies.
 
+**The `models` block is required. opencode will not call the router's
+`/v1/models`.** Discovery is special-cased for three runtimes only — Ollama
+(`/api/tags`), LM Studio and vLLM (`/v1/models`). For anything else the docs
+say to "use the custom provider recipe and list its models explicitly". A
+custom provider with an empty or missing `models` map exists but has nothing
+selectable, which surfaces as `Model unavailable: cc/<anything>`.
+
+List only the models you actually use rather than all 85 the bridge serves.
+
 One failure mode to know: a missing or empty key file substitutes an empty
 string, so opencode sends `Authorization: Bearer ` and the router answers 401.
 If the provider authenticates as nobody, check that the file exists before
