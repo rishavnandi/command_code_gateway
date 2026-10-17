@@ -237,10 +237,37 @@ for f in sorted(glob.glob('/Users/rishav/.commandcode/pool/key-*.txt')):
 
 Two matching hashes means a login overwrote a capture.
 
+One thing to watch: opencode v2 stores provider credentials in SQLite, not in
+`auth.json`. `~/.commandcode/auth.json` is the Command Code CLI's own file and
+the plugin mirrors to it, but confirm the hash changed after each `/connect`
+rather than assuming the mirror still fires. The comparison above is the check.
+
 ## opencode config
 
-Add beside the existing `plugins` and `mcp` in `~/.config/opencode/opencode.jsonc`.
-Take model IDs from the router's `/v1/models` rather than from this file:
+`vault_data.shared_secret` becomes `BRIDGE_API_KEY`, and it does triple duty:
+
+1. the credential opencode presents to the router
+2. the credential the router presents to each bridge
+3. each bridge's own `BRIDGE_API_KEY`
+
+One string, all three. Hand it to opencode through the **server's** managed
+environment, not your shell — opencode runs a shared background service, and
+exporting in a terminal does not reach it:
+
+```sh
+opencode service set env BRIDGE_API_KEY <shared_secret>
+opencode service unset env BRIDGE_API_KEY     # to remove
+```
+
+That persists in the service config and survives reboots and relaunches from a
+GUI client. It stops the running service once; the next opencode command brings
+it back with the value. It shows up in `opencode auth list` with type
+`environment`, which is expected — it is not a saved account, so `auth logout`
+cannot remove it.
+
+Then add the provider beside the existing `plugins` and `mcp` in
+`~/.config/opencode/opencode.jsonc`. Take model IDs from the router's
+`/v1/models` rather than from this file:
 
 ```jsonc
 "providers": {

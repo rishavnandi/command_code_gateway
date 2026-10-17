@@ -33,6 +33,39 @@ ansible-playbook site.yml
 The hosts need Docker installed and a sudo-capable login; the playbook does not
 install Docker.
 
+## Wiring opencode up
+
+`shared_secret` becomes `BRIDGE_API_KEY` everywhere: what opencode presents to
+the router, what the router presents to each bridge, and each bridge's own key.
+One string, all three jobs.
+
+opencode runs a shared background server, so exporting the variable in a
+terminal will not reach it. Use the service's managed environment:
+
+```sh
+opencode service set env BRIDGE_API_KEY <shared_secret>
+```
+
+Then add to `~/.config/opencode/opencode.jsonc`, then restart the service by
+running any opencode command. It appears in `opencode auth list` with type
+`environment`, which is correct — it is not a saved account, so `auth logout`
+will not remove it.
+
+```jsonc
+"providers": {
+  "cc": {
+    "name": "Command Code (pooled)",
+    "env": ["BRIDGE_API_KEY"],
+    "package": "@opencode/ai/providers/openai-compatible",
+    "settings": {
+      "baseURL": "http://<arm-tailnet-ip>:9992/v1",
+      "encoding": "none"
+    },
+    "models": { "gpt-5.3-codex": { "name": "GPT-5.3 Codex" } }
+  }
+}
+```
+
 ## Getting the keys
 
 `~/.commandcode/auth.json` holds one key at a time, so capture after each login
