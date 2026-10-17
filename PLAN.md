@@ -99,7 +99,7 @@ for free.
   ansible.builtin.git:
     repo: https://github.com/yelixir-dev/commandcode-bridge
     dest: /opt/commandcode-bridge
-    version: "{{ cc_bridge_version }}"   # a release tag, not main
+    version: "{{ cc_bridge_tag }}"   # a release tag, not main
 ```
 
 **Env file.** Render from the vault, mode 0600, `no_log: true`. The template
@@ -266,12 +266,12 @@ because gateways reject compressed bodies.
 
 Two paths, neither scheduled. Both start with `ansible-playbook site.yml`.
 
-**A 403 names a version.** Upstream raised its floor. Edit `cc_bridge_version` or
+**A 403 names a version.** Upstream raised its floor. Edit `cc_bridge_tag` or
 let the probe task refresh the pin, re-run the playbook. The compose step
 recreates the containers. No rebuild unless you also moved the tag.
 
 **A new bridge release, a bug, or models you want.** Set
-`cc_bridge_version` to the newer tag, re-run. The clone updates, the image
+`cc_bridge_tag` to the newer tag, re-run. The clone updates, the image
 rebuilds, containers recreate. Rollback is setting the tag back.
 
 The playbook is idempotent, so re-running it with nothing changed is safe and a

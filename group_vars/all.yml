@@ -2,10 +2,13 @@
 # The CLI version pin lives in each host's env file, not in the image.
 cc_bridge_repo: https://github.com/yelixir-dev/commandcode-bridge
 
-# A release tag, never "main". Pinning makes the build reproducible and makes
-# rollback a one-line change.
-#   git ls-remote --tags https://github.com/yelixir-dev/commandcode-bridge
-cc_bridge_version: REPLACE_WITH_RELEASE_TAG
+# A release TAG, never "main". Pinning makes the build reproducible and makes
+# rollback a one-line change. The playbook warns you when upstream moves past
+# this, but deliberately does not follow it — a bridge release is code, and the
+# cost of an unwanted one is higher than the cost of this reminder.
+#   git ls-remote --tags --refs --sort=-v:refname \
+#     https://github.com/yelixir-dev/commandcode-bridge | head
+cc_bridge_tag: v1.74.0.d
 
 cc_source_dir: /opt/commandcode-bridge
 cc_service_dir: /opt/cc

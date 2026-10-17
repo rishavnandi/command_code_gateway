@@ -7,7 +7,7 @@
 # from Ansible Vault, then builds and starts. Safe to re-run: nothing changes
 # unless the pinned tag or the vault contents changed.
 #
-# The only thing you do by hand is move cc_bridge_version in
+# The only thing you do by hand is move cc_bridge_tag in
 # group_vars/all.yml, and only when you want a newer bridge.
 
 - name: command code bridge fleet
@@ -35,6 +35,41 @@
       ansible.builtin.set_fact:
         cc_cli_version: "{{ cc_probe.stdout | trim }}"
 
+    # Report upstream's newest bridge release, but do not follow it. The CLI
+    # version above is data — a version floor only ever rejects something too
+    # old, so reporting newer is always safe. The bridge tag is code: a new
+    # release can change the wire protocol, the model catalog or the router's
+    # failover behaviour, and silently rebuilding different code on every run
+    # leaves you with no rollback. So this warns instead of acting.
+    #
+    # --sort=-v:refname is git's own version sort. A plain lexical sort would
+    # rank v1.100.0 below v1.74.0.d, which is a bug waiting for two digits.
+    - name: list upstream bridge releases
+      ansible.builtin.command:
+        argv:
+          - git
+          - ls-remote
+          - "--tags"
+          - "--refs"
+          - "--sort=-v:refname"
+          - "{{ cc_bridge_repo }}"
+      register: cc_remote_tags
+      changed_when: false
+      check_mode: false
+      delegate_to: localhost
+
+    - name: newest upstream bridge release
+      ansible.builtin.set_fact:
+        cc_bridge_latest: "{{ cc_remote_tags.stdout_lines[0].split('refs/tags/') | last }}"
+
+    - name: report when the pin is behind upstream
+      ansible.builtin.debug:
+        msg: >-
+          Upstream bridge has released {{ cc_bridge_latest }};
+          cc_bridge_tag is pinned to {{ cc_bridge_tag }}.
+          Edit group_vars/all.yml to move. Not automatic on purpose.
+      when: cc_bridge_tag != cc_bridge_latest
+
     # Built as id=url pairs, which is the format COMMANDCODE_ROUTER_BACKENDS
     # expects. A plain Jinja loop rather than regex_replace: the backreference
     # escaping in a YAML block scalar does not survive the trip reliably, and a
@@ -47,7 +82,7 @@
       ansible.builtin.git:
         repo: "{{ cc_bridge_repo }}"
         dest: "{{ cc_source_dir }}"
-        version: "{{ cc_bridge_version }}"
+        version: "{{ cc_bridge_tag }}"
         force: true
 
     - name: create the service directory

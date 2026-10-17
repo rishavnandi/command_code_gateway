@@ -47,7 +47,7 @@ python3 -c "import json,os;k=json.load(open(os.path.expanduser('~/.commandcode/a
 **A 403 naming a version.** Upstream raised its floor. Re-run the playbook; the
 pin task picks up the current published version.
 
-**A new bridge release, or models you want.** Change `cc_bridge_version` to the
+**A new bridge release, or models you want.** Change `cc_bridge_tag` to the
 newer tag and re-run. Rollback is changing it back.
 
 ## Secrets
