@@ -39,32 +39,36 @@ install Docker.
 the router, what the router presents to each bridge, and each bridge's own key.
 One string, all three jobs.
 
-opencode runs a shared background server, so exporting the variable in a
-terminal will not reach it. Use the service's managed environment:
+Write it to a local file and read it with a `{file:...}` substitution — the same
+pattern this config already uses for Context7. `~/.config/opencode/` is a plain
+local directory whose config files are symlinks into the dotfiles repo, so a
+real file there is never tracked.
 
 ```sh
-opencode service set env BRIDGE_API_KEY <shared_secret>
+chmod 600 ~/.config/opencode/cc-bridge.key
 ```
 
-Then add to `~/.config/opencode/opencode.jsonc`, then restart the service by
-running any opencode command. It appears in `opencode auth list` with type
-`environment`, which is correct — it is not a saved account, so `auth logout`
-will not remove it.
+Then add to `~/.config/opencode/opencode.jsonc` (a symlink to your dotfiles
+repo) and restart opencode:
 
 ```jsonc
 "providers": {
   "cc": {
     "name": "Command Code (pooled)",
-    "env": ["BRIDGE_API_KEY"],
     "package": "@opencode/ai/providers/openai-compatible",
     "settings": {
       "baseURL": "http://<arm-tailnet-ip>:9992/v1",
+      "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
       "encoding": "none"
     },
     "models": { "gpt-5.3-codex": { "name": "GPT-5.3 Codex" } }
   }
 }
 ```
+
+A missing key file substitutes an empty string, so opencode sends an empty
+Bearer and the router answers 401. If the provider authenticates as nobody,
+check the file exists before suspecting the tailnet.
 
 ## Getting the keys
 

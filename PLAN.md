@@ -250,33 +250,32 @@ rather than assuming the mirror still fires. The comparison above is the check.
 2. the credential the router presents to each bridge
 3. each bridge's own `BRIDGE_API_KEY`
 
-One string, all three. Hand it to opencode through the **server's** managed
-environment, not your shell — opencode runs a shared background service, and
-exporting in a terminal does not reach it:
+One string, all three. opencode reads it from a local file rather than an
+environment variable, using the same `{file:...}` substitution already used for
+Context7 in this config. No service restart, no `opencode service set env`, and
+the config stays in the dotfiles repo where it belongs.
+
+Write the secret to `~/.config/opencode/cc-bridge.key`, mode 0600. That
+directory is a plain local directory whose files are symlinks into the dotfiles
+repo, so a real file there is never tracked — no `.gitignore` needed.
 
 ```sh
-opencode service set env BRIDGE_API_KEY <shared_secret>
-opencode service unset env BRIDGE_API_KEY     # to remove
+chmod 600 ~/.config/opencode/cc-bridge.key
 ```
 
-That persists in the service config and survives reboots and relaunches from a
-GUI client. It stops the running service once; the next opencode command brings
-it back with the value. It shows up in `opencode auth list` with type
-`environment`, which is expected — it is not a saved account, so `auth logout`
-cannot remove it.
-
 Then add the provider beside the existing `plugins` and `mcp` in
-`~/.config/opencode/opencode.jsonc`. Take model IDs from the router's
+`~/.config/opencode/opencode.jsonc`, which is a symlink to
+`~/data/projects/dotfiles/opencode.jsonc`. Take model IDs from the router's
 `/v1/models` rather than from this file:
 
 ```jsonc
 "providers": {
   "cc": {
     "name": "Command Code (pooled)",
-    "env": ["BRIDGE_API_KEY"],
     "package": "@opencode/ai/providers/openai-compatible",
     "settings": {
       "baseURL": "http://<arm-tailnet-ip>:9992/v1",
+      "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
       "encoding": "none"
     },
     "models": {
@@ -286,8 +285,12 @@ Then add the provider beside the existing `plugins` and `mcp` in
 }
 ```
 
-`env` is required because the router is off loopback. `encoding: "none"`
-because gateways reject compressed bodies.
+`encoding: "none"` because gateways reject compressed bodies.
+
+One failure mode to know: a missing or empty key file substitutes an empty
+string, so opencode sends `Authorization: Bearer ` and the router answers 401.
+If the provider authenticates as nobody, check that the file exists before
+suspecting the tailnet.
 
 ## Maintenance
 
