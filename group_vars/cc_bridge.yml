@@ -1,0 +1,2 @@
+# One Go account per bridge host, so each egresses from its own IP.
+cc_role: bridge

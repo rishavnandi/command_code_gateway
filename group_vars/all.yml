@@ -1,0 +1,16 @@
+# Upstream source. No fork: nothing this setup changes lives in the code.
+# The CLI version pin lives in each host's env file, not in the image.
+cc_bridge_repo: https://github.com/yelixir-dev/commandcode-bridge
+
+# A release tag, never "main". Pinning makes the build reproducible and makes
+# rollback a one-line change.
+#   git ls-remote --tags https://github.com/yelixir-dev/commandcode-bridge
+cc_bridge_version: REPLACE_WITH_RELEASE_TAG
+
+cc_source_dir: /opt/commandcode-bridge
+cc_service_dir: /opt/cc
+cc_service_port: 9992
+
+# cc_role is set per group, not here: see group_vars/cc_bridge.yml and
+# group_vars/cc_router.yml. Setting it in all.yml and overriding it inline in
+# the inventory does not work — the lower-precedence file silently wins.

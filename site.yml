@@ -1,0 +1,95 @@
+---
+# Command Code pooled gateway — one playbook for the whole fleet.
+#
+#   ansible-playbook site.yml
+#
+# Per host it syncs the upstream source at a pinned tag, renders the env file
+# from Ansible Vault, then builds and starts. Safe to re-run: nothing changes
+# unless the pinned tag or the vault contents changed.
+#
+# The only thing you do by hand is move cc_bridge_version in
+# group_vars/all.yml, and only when you want a newer bridge.
+
+- name: command code bridge fleet
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: fail early with a clear message if docker is missing
+      ansible.builtin.command: docker --version
+      changed_when: false
+
+    # Read on the controller, because the Oracle hosts have no npm — only the
+    # container image does. This is what replaces a cron job: the pin refreshes
+    # when you run the playbook, not on a schedule.
+    - name: read the published Command Code CLI version
+      ansible.builtin.command: npm view command-code version
+      register: cc_probe
+      changed_when: false
+      check_mode: false
+      delegate_to: localhost
+
+    - name: pin the CLI version
+      ansible.builtin.set_fact:
+        cc_cli_version: "{{ cc_probe.stdout | trim }}"
+
+    # Built as id=url pairs, which is the format COMMANDCODE_ROUTER_BACKENDS
+    # expects. A plain Jinja loop rather than regex_replace: the backreference
+    # escaping in a YAML block scalar does not survive the trip reliably, and a
+    # literal \1 here would silently produce a router that reaches no backend.
+    - name: build the router backend list from the cc_bridge group
+      ansible.builtin.set_fact:
+        cc_router_backends: "{% for h in groups['cc_bridge'] %}{{ h }}=http://{{ hostvars[h]['ansible_host'] }}:{{ cc_service_port }}{% if not loop.last %},{% endif %}{% endfor %}"
+
+    - name: sync upstream source at the pinned tag
+      ansible.builtin.git:
+        repo: "{{ cc_bridge_repo }}"
+        dest: "{{ cc_source_dir }}"
+        version: "{{ cc_bridge_version }}"
+        force: true
+
+    - name: create the service directory
+      ansible.builtin.file:
+        path: "{{ cc_service_dir }}/{{ cc_role }}"
+        state: directory
+        mode: "0755"
+
+    - name: render the env file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/files/{{ cc_role }}.env.j2"
+        dest: "{{ cc_service_dir }}/{{ cc_role }}/{{ cc_role }}.env"
+        mode: "0600"
+      no_log: true
+
+    - name: render the compose file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/files/compose-{{ cc_role }}.yml.j2"
+        dest: "{{ cc_service_dir }}/{{ cc_role }}/compose.yml"
+        mode: "0644"
+
+    # Async, not the docker_compose_v2 module, because the build stage runs the
+    # project's full verify suite. On a 1GB/1-vCPU box that can outlast an SSH
+    # timeout, and a synchronous module call would drop the connection mid-build.
+    - name: build and start
+      ansible.builtin.command: docker compose up -d --build --remove-orphans
+      args:
+        chdir: "{{ cc_service_dir }}/{{ cc_role }}"
+      async: 5400
+      poll: 15
+      changed_when: true
+
+    - name: confirm the container is running
+      community.docker.docker_container_info:
+        name: "cc-{{ cc_role }}"
+      register: cc_container
+
+    - name: fail if the container is not running
+      ansible.builtin.fail:
+        msg: >-
+          cc-{{ cc_role }} is not running on {{ inventory_hostname }}.
+          Its per-key window meter and recent errors are at
+          http://{{ ansible_host }}:{{ cc_service_port }}/dashboard/
+          for a bridge, or /health for the router.
+      when: cc_container.exists and not cc_container.container.State.Running

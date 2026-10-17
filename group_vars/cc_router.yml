@@ -1,0 +1,3 @@
+# The router sees every request, so it goes on the box with headroom.
+# Same image as the bridges, different entrypoint and a different env file.
+cc_role: router

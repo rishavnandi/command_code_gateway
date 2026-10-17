@@ -1,0 +1,11 @@
+services:
+  bridge:
+    build:
+      context: "{{ cc_source_dir }}"
+    image: cc-bridge:local
+    container_name: cc-bridge
+    restart: unless-stopped
+    # Host networking rather than published ports: it sidesteps rootless port
+    # publishing entirely, and HOST=0.0.0.0 in the env file does the binding.
+    network_mode: host
+    env_file: ./{{ cc_role }}.env

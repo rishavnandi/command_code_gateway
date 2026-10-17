@@ -1,0 +1,7 @@
+# Ansible Vault holds the real keys. Only the example is committed.
+vault.yml
+
+# ansible retry/artifact cruft
+*.retry
+__pycache__/
+.ansible/

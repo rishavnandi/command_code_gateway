@@ -1,0 +1,20 @@
+# Replace every REPLACE_WITH_* value before the first run.
+#
+# The playbook builds COMMANDCODE_ROUTER_BACKENDS from the cc_bridge group, so
+# adding a third account is: add a host here, add its key to vault.yml.
+
+all:
+  children:
+
+    cc_bridge:
+      # One Go account per host. Each therefore egresses from its own IP.
+      hosts:
+        oracle1:
+          ansible_host: "REPLACE_WITH_ORACLE1_TAILNET_IP"
+        oracle2:
+          ansible_host: "REPLACE_WITH_ORACLE2_TAILNET_IP"
+
+    cc_router:
+      hosts:
+        armbox:
+          ansible_host: "REPLACE_WITH_ARMBOX_TAILNET_IP"

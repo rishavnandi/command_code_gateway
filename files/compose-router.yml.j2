@@ -1,0 +1,11 @@
+services:
+  router:
+    build:
+      context: "{{ cc_source_dir }}"
+    image: cc-bridge:local
+    container_name: cc-router
+    restart: unless-stopped
+    network_mode: host
+    env_file: ./{{ cc_role }}.env
+    # Same image as the bridges, different entrypoint.
+    command: ["node", "dist/router-index.js"]

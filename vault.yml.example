@@ -1,0 +1,18 @@
+# Copy to vault.yml, fill in, then encrypt:
+#
+#   cp vault.yml.example vault.yml
+#   ansible-vault encrypt vault.yml
+#
+# vault.yml is gitignored. Losing the vault password means both Command Code
+# accounts need a fresh browser login, because ~/.commandcode/auth.json only
+# ever holds one key at a time.
+
+vault_data:
+  # Shared by all three hosts. It is what the router demands from opencode and
+  # what it sends to each bridge. Generate with: openssl rand -hex 32
+  shared_secret: "REPLACE_WITH_RANDOM_HEX"
+
+  # One key per host. Must match the hostname keys in inventory.yml.
+  cc_keys:
+    oracle1: "REPLACE_WITH_USER_KEY"
+    oracle2: "REPLACE_WITH_USER_KEY"
