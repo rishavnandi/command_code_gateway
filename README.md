@@ -61,7 +61,7 @@ repo) and restart opencode:
       "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
       "encoding": "none"
     },
-    "models": { "gpt-5.3-codex": { "name": "GPT-5.3 Codex" } }
+    "models": { "deepseek/deepseek-v4.1-flash": { "name": "DeepSeek V4.1 Flash" } }
   }
 }
 ```
@@ -101,8 +101,11 @@ password is load-bearing for both accounts — store it in a password manager.
 
 ## Known limits
 
-- Go-plan accounts cannot use the bridge's live model catalog; they are pinned to
-  the version bundled in the release. Only a newer bridge release changes it.
+- Only **one** model is allowlisted (`cc_allowed_models` in
+  `group_vars/all.yml`), because that is all this setup needs. The bridge
+  enables 6 of its 85 bundled models by default and rejects everything else
+  with a 400, so any second model must be added to both that list and the
+  opencode `models` block.
 - The router cools a failed backend for a flat 60s and ignores `Retry-After`, so
   an exhausted account is re-probed each minute rather than parked until its
   window resets. Harmless with two accounts; noisy.

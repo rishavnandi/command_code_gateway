@@ -15,6 +15,25 @@
   become: true
   gather_facts: true
 
+  # Without this, vault_data is undefined and the env-render task fails. The
+  # pre_task below checks for the file first so the error names the fix.
+  vars_files:
+    - vault.yml
+
+  pre_tasks:
+    - name: check the vault exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/vault.yml"
+      register: cc_vault
+
+    - name: explain how to create the vault
+      ansible.builtin.fail:
+        msg: >-
+          {{ playbook_dir }}/vault.yml not found. Create it once with
+          "cp vault.yml.example vault.yml", fill it in, then
+          "ansible-vault encrypt vault.yml".
+      when: not cc_vault.stat.exists
+
   tasks:
 
     - name: fail early with a clear message if docker is missing
@@ -30,6 +49,9 @@
       changed_when: false
       check_mode: false
       delegate_to: localhost
+      # become is inherited from the play, and sudo on the controller would
+      # either prompt or fail. This task runs on your machine, not the VPS.
+      become: false
 
     - name: pin the CLI version
       ansible.builtin.set_fact:
@@ -57,6 +79,7 @@
       changed_when: false
       check_mode: false
       delegate_to: localhost
+      become: false
 
     - name: newest upstream bridge release
       ansible.builtin.set_fact:
@@ -120,11 +143,13 @@
         name: "cc-{{ cc_role }}"
       register: cc_container
 
-    - name: fail if the container is not running
+    - name: fail if the container is missing or not running
       ansible.builtin.fail:
         msg: >-
           cc-{{ cc_role }} is not running on {{ inventory_hostname }}.
           Its per-key window meter and recent errors are at
           http://{{ ansible_host }}:{{ cc_service_port }}/dashboard/
           for a bridge, or /health for the router.
-      when: cc_container.exists and not cc_container.container.State.Running
+      # `exists` short-circuits, so the second clause is only read when the
+      # container does exist. A container that never started also fails this.
+      when: not cc_container.exists or not cc_container.container.State.Running

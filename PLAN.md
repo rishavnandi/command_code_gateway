@@ -165,7 +165,7 @@ restart.
 container does. Your Mac already has node.
 
 The bridge hardcodes CLI `1.74.0` in `src/config.ts`, and the published CLI is
-**1.83.0**, so the baked default is nine versions stale and will eventually
+**1.84.0**, so the baked default is ten releases stale and will eventually
 hard-403. `COMMANDCODE_CLI_VERSION` in the env file overrides it at runtime, so
 the pin never requires a rebuild.
 
@@ -279,7 +279,7 @@ Then add the provider beside the existing `plugins` and `mcp` in
       "encoding": "none"
     },
     "models": {
-      "gpt-5.3-codex": { "name": "GPT-5.3 Codex" }
+      "deepseek/deepseek-v4.1-flash": { "name": "DeepSeek V4.1 Flash" }
     }
   }
 }
@@ -346,13 +346,19 @@ unverified.
   a fresh browser login. Keep it in a password manager, not only in your head.
 - **Tailnet exposure.** All three boxes bind `0.0.0.0`, so `BRIDGE_API_KEY` is
   the only control. Use a real secret and confirm tailnet ACLs.
-- **Frozen catalog.** `refreshProviderModelCatalog` in `src/server.ts` fetches
-  `GET /provider/v1/models` at startup with no `Authorization` header. That is
-  the Provider API, which 403s for Go plans, so the fetch fails and the static
-  table is kept. Go accounts are permanently on the bundled **1.74.0 catalog of
-  85 models**. Your plugin's catalog is 87 at 1.79.2, so the bridge serves
-  fewer models than the plugin it replaces. Only a newer bridge release fixes
-  this.
+- **Frozen catalog, but not a hard ceiling.** `refreshProviderModelCatalog` in
+  `src/server.ts` fetches `GET /provider/v1/models` at startup with no
+  `Authorization` header. That is the Provider API, which 403s for Go plans, so
+  the fetch fails and the static table is kept: Go accounts are permanently on
+  the bundled **1.74-era list of 85 models**.
+
+  That gates metadata, not availability. `COMMANDCODE_ALLOWED_MODELS` accepts
+  any ID, including one the 1.74 table has never heard of, because
+  `mergeModelCatalog` enables configured entries that have no bundled
+  definition. So a newer upstream model can be served by ID without a newer
+  bridge release. What you lose is its `contextWindow` and pricing, which fall
+  back to a generic custom entry — set them in the bridge's dashboard config if
+  that matters. Verified against the loader.
 - **Not verified:** whether Command Code correlates accounts by source IP,
   whether it rejects a version too *new* as well as too old, whether a second
   login invalidates the first account's session, and whether

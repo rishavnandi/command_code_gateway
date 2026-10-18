@@ -14,6 +14,14 @@ cc_source_dir: /opt/commandcode-bridge
 cc_service_dir: /opt/cc
 cc_service_port: 9992
 
+# The bridge enables only 6 of its bundled 85 models by default, and any other
+# id gets a 400 ModelNotAllowedError. This extends that set rather than
+# replacing it — verified against the bridge's own config loader, which also
+# accepts ids missing from the 1.74 table. Keep it in sync with the models
+# block in ~/.config/opencode/opencode.jsonc.
+cc_allowed_models:
+  - deepseek/deepseek-v4.1-flash
+
 # cc_role is set per group, not here: see group_vars/cc_bridge.yml and
 # group_vars/cc_router.yml. Setting it in all.yml and overriding it inline in
 # the inventory does not work — the lower-precedence file silently wins.
