@@ -1,55 +1,115 @@
 # command_code_gateway
 
 Ansible that runs a pooled [Command Code](https://commandcode.ai) gateway across
-three VPSes on a tailnet. Two $1 Go accounts, one bridge each, so neither shares
-a source IP, pooled by the bridge's own `commandcode-router`.
+three VPSes on a tailnet. Two $1 Go accounts, one bridge each so neither shares a
+source IP, pooled by the bridge's own `commandcode-router`. opencode runs on the
+laptop and talks to the router.
 
 Full design and rationale in [PLAN.md](PLAN.md).
 
 ## What it does
 
-Per host: sync upstream source at a pinned tag, render an env file from Ansible
-Vault, build the image, start the container. Plus one nicety — it reads the
-published Command Code CLI version from npm and pins it, which is what keeps the
-bridge's stale baked-in version from hard-403ing.
+Per host the playbook:
 
-## Setup
+1. installs Docker CE, compose and buildx (Oracle Linux, Ubuntu/Debian and
+   RHEL-family all handled)
+2. syncs the upstream bridge source at a pinned release tag
+3. renders an env file from Ansible Vault, mode 0600
+4. builds the image and starts the container under compose
+5. asserts the container is actually running
+
+Plus one nicety: it reads the published Command Code CLI version from npm and
+pins it, so the bridge's stale baked-in version never hard-403s. It also warns
+when a newer bridge release exists, without following it.
+
+## Run it
+
+### 1. Fill in the inventory
+
+```sh
+$EDITOR inventory.yml
+```
+
+Replace the three `REPLACE_WITH_*_TAILNET_IP` values and the two
+`REPLACE_WITH_SSH_USER` ones. The hostnames `oracle1`, `oracle2` and `armbox`
+matter — they key the vault and the per-host project slug.
+
+### 2. Get the two Command Code keys
+
+`~/.commandcode/auth.json` holds **one** key at a time, so each login replaces
+the last. Capture after each one, or you lose it.
+
+```sh
+mkdir -p ~/.commandcode/pool && chmod 700 ~/.commandcode/pool
+```
+
+Then, in opencode, `/connect` → Command Code. After it completes:
+
+```sh
+python3 -c "import json,os;k=json.load(open(os.path.expanduser('~/.commandcode/auth.json')))['command-code']['key'];print(k)" \
+  > ~/.commandcode/pool/key-1.txt
+chmod 600 ~/.commandcode/pool/key-1.txt
+```
+
+Repeat with the second account, writing `key-2.txt`. Confirm you got both
+without printing either:
+
+```sh
+python3 -c "
+import hashlib,glob
+for f in sorted(glob.glob('/Users/rishav/.commandcode/pool/key-*.txt')):
+    print(hashlib.sha256(open(f).read().strip().encode()).hexdigest()[:12], f)"
+```
+
+Two different hashes. Two matching hashes means a login overwrote a capture.
+
+One caveat: opencode v2 stores credentials in SQLite, and `auth.json` is the
+Command Code CLI's own file. If the hash does not change after a login, stop and
+check — otherwise you will reuse account 1's key on account 2, which is the one
+failure here that produces no error message.
+
+### 3. Create and encrypt the vault
 
 ```sh
 cp vault.yml.example vault.yml
-$EDITOR vault.yml                    # shared_secret + one key per bridge host
+openssl rand -hex 32        # copy this into shared_secret
+$EDITOR vault.yml           # shared_secret, then both keys from step 2
 ansible-vault encrypt vault.yml
-$EDITOR inventory.yml                # tailnet IPs
-$EDITOR group_vars/all.yml           # a release tag from:
-git ls-remote --tags https://github.com/yelixir-dev/commandcode-bridge
 ```
 
-Then run it:
+Pick a vault password and put it in your password manager. Losing it means
+re-doing step 2 from scratch.
+
+### 4. Dry run against one host
 
 ```sh
-ansible-playbook site.yml
+ansible all -m ping
+ansible-playbook site.yml --limit oracle1 --check --ask-become-pass
 ```
 
-The hosts need Docker installed and a sudo-capable login; the playbook does not
-install Docker.
+The version pin lives inside the fleet play specifically so `--limit` does not
+skip it.
 
-## Wiring opencode up
-
-`shared_secret` becomes `BRIDGE_API_KEY` everywhere: what opencode presents to
-the router, what the router presents to each bridge, and each bridge's own key.
-One string, all three jobs.
-
-Write it to a local file and read it with a `{file:...}` substitution — the same
-pattern this config already uses for Context7. `~/.config/opencode/` is a plain
-local directory whose config files are symlinks into the dotfiles repo, so a
-real file there is never tracked.
+### 5. Deploy
 
 ```sh
-chmod 600 ~/.config/opencode/cc-bridge.key
+ansible-playbook site.yml --ask-become-pass
 ```
 
-Then add to `~/.config/opencode/opencode.jsonc` (a symlink to your dotfiles
-repo) and restart opencode:
+First run builds an image on each box, including the upstream project's full
+verify suite. On the two 1GB Oracle boxes that is slow, and it is the one part
+this setup has never tested. Expect several minutes, not seconds.
+
+### 6. Wire opencode up
+
+Write the same `shared_secret` to a local key file:
+
+```sh
+umask 077
+printf '%s' '<shared_secret>' > ~/.config/opencode/cc-bridge.key
+```
+
+Add to `~/.config/opencode/opencode.jsonc`, then restart opencode:
 
 ```jsonc
 "providers": {
@@ -57,57 +117,68 @@ repo) and restart opencode:
     "name": "Command Code (pooled)",
     "package": "@opencode/ai/providers/openai-compatible",
     "settings": {
-      "baseURL": "http://<arm-tailnet-ip>:9992/v1",
+      "baseURL": "http://<armbox-tailnet-ip>:9992/v1",
       "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
       "encoding": "none"
     },
-    "models": { "deepseek/deepseek-v4.1-flash": { "name": "DeepSeek V4.1 Flash" } }
+    "models": {
+      "deepseek/deepseek-v4.1-flash": { "name": "DeepSeek V4.1 Flash" }
+    }
   }
 }
 ```
 
-A missing key file substitutes an empty string, so opencode sends an empty
-Bearer and the router answers 401. If the provider authenticates as nobody,
-check the file exists before suspecting the tailnet.
+`~/.config/opencode/` is a plain local directory whose config files are
+symlinks into your dotfiles repo, so that key file is never tracked.
 
-**The `models` block is required** — opencode will not call your router's
-`/v1/models`. Discovery is special-cased for Ollama, LM Studio and vLLM only.
-For any other OpenAI-compatible endpoint the docs say to list models
-explicitly. Without them the provider exists but nothing is selectable, and
-you get `Model unavailable: cc/<anything>`. List the handful you use, not all
-85 the bridge serves.
+**The `models` block is required.** opencode does not call a custom provider's
+`/v1/models` — discovery is special-cased for Ollama, LM Studio and vLLM only.
+Without it you get `Model unavailable: cc/<anything>`.
 
-## Getting the keys
-
-`~/.commandcode/auth.json` holds one key at a time, so capture after each login
-before doing the next. `/connect` → Command Code in opencode, then:
+### 7. Prove it works
 
 ```sh
-python3 -c "import json,os;k=json.load(open(os.path.expanduser('~/.commandcode/auth.json')))['command-code']['key'];print(k)"
+curl -sS http://<armbox-tailnet-ip>:9992/health
+curl -sS -H "Authorization: Bearer $(cat ~/.config/opencode/cc-bridge.key)" \
+  http://<armbox-tailnet-ip>:9992/v1/models | head -c 400
 ```
 
-## When something breaks
+Then a real turn in opencode on `cc/deepseek/deepseek-v4.1-flash`, and stop one
+bridge (`ansible oracle1 -a 'docker compose -f /opt/cc/bridge/compose.yml stop'`)
+to confirm the other still serves.
 
-**A 403 naming a version.** Upstream raised its floor. Re-run the playbook; the
-pin task picks up the current published version.
+## Maintenance
 
-**A new bridge release, or models you want.** Change `cc_bridge_tag` to the
-newer tag and re-run. Rollback is changing it back.
+Two paths, neither scheduled. The version pin refreshes itself on every run.
+
+**A 403 names a version.** Just re-run the playbook; the pin picks up the
+current published version. No rebuild.
+
+**A new bridge release, or models you want.** Change `cc_bridge_tag` in
+`group_vars/all.yml` and re-run. Rollback is changing it back.
+
+## Gotchas that cost real time
+
+- **Only one model is allowlisted.** The bridge enables 6 of its 85 bundled
+  models and rejects the rest with a 400. `cc_allowed_models` in
+  `group_vars/all.yml` extends that set. A second model must be added to both
+  that list and the opencode `models` block, or one side 400s.
+- **Both keys on one box would share one IP.** The whole point of the split is
+  a distinct egress IP per account. Collapsing to a single container is cheaper
+  but puts both accounts behind one address.
+- **The router ignores `Retry-After`.** It cools a failed backend for a flat
+  60s, so an account whose window is spent gets re-probed each minute rather
+  than parked until it resets. Harmless with two accounts, noisy.
+- **`x-project-slug` is per-host** (`working_dir` in the compose template), so
+  the accounts do not share a slug. Only the basename is sent.
 
 ## Secrets
 
-`vault.yml` is gitignored. Only `vault.yml.example` is committed. The vault
-password is load-bearing for both accounts — store it in a password manager.
+`vault.yml` is gitignored. Only `vault.yml.example` is committed.
+`~/.config/opencode/cc-bridge.key` lives outside any repo.
 
-## Known limits
+## Requirements
 
-- Only **one** model is allowlisted (`cc_allowed_models` in
-  `group_vars/all.yml`), because that is all this setup needs. The bridge
-  enables 6 of its 85 bundled models by default and rejects everything else
-  with a 400, so any second model must be added to both that list and the
-  opencode `models` block.
-- The router cools a failed backend for a flat 60s and ignores `Retry-After`, so
-  an exhausted account is re-probed each minute rather than parked until its
-  window resets. Harmless with two accounts; noisy.
-- `x-project-slug` now differs per host (`working_dir` in the compose
-  template), so the two accounts do not share a slug.
+- Docker installs itself; nothing else is assumed beyond SSH and sudo
+- Ansible on the controller, plus `git` and `npm` (the version probe uses the
+  published npm package)

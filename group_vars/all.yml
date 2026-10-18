@@ -14,6 +14,11 @@ cc_source_dir: /opt/commandcode-bridge
 cc_service_dir: /opt/cc
 cc_service_port: 9992
 
+# Only used to add the login user to the docker group during install. The
+# connecting user is preferred; this is the fallback when ansible_user is unset
+# because the inventory relies on your ssh config.
+cc_admin_user: "{{ lookup('env', 'USER') }}"
+
 # The bridge enables only 6 of its bundled 85 models by default, and any other
 # id gets a 400 ModelNotAllowedError. This extends that set rather than
 # replacing it — verified against the bridge's own config loader, which also

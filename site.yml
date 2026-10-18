@@ -86,14 +86,16 @@
           "ansible-vault encrypt vault.yml".
       when: not cc_vault.stat.exists
 
-    - name: fail early if a prerequisite is missing
-      ansible.builtin.command: "{{ item }} --version"
-      loop:
-        - docker
-        - git
-      changed_when: false
-
   tasks:
+
+    - name: install docker and compose
+      ansible.builtin.include_tasks: tasks/docker.yml
+
+    # include_tasks runs the file's tasks in order, so anything the docker
+    # install needs (git for the source clone) is already present here.
+    - name: confirm git is available for the source checkout
+      ansible.builtin.command: git --version
+      changed_when: false
 
     # Built as id=url pairs, which is the format COMMANDCODE_ROUTER_BACKENDS
     # expects. A plain Jinja loop rather than regex_replace: the backreference

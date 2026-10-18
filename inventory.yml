@@ -2,12 +2,19 @@
 #
 # The playbook builds COMMANDCODE_ROUTER_BACKENDS from the cc_bridge group, so
 # adding a third account is: add a host here, add its key to vault.yml.
+#
+# ansible_user is set per group so `become: true` has something to sudo as.
+# Ubuntu images default to "ubuntu", Oracle Linux images to "opc" — change
+# these if yours differ. If SSH already works via ~/.ssh/config you can drop
+# the ansible_* lines entirely and Ansible will use your config.
 
 all:
   children:
 
     cc_bridge:
       # One Go account per host. Each therefore egresses from its own IP.
+      vars:
+        ansible_user: REPLACE_WITH_SSH_USER
       hosts:
         oracle1:
           ansible_host: "REPLACE_WITH_ORACLE1_TAILNET_IP"
@@ -15,6 +22,8 @@ all:
           ansible_host: "REPLACE_WITH_ORACLE2_TAILNET_IP"
 
     cc_router:
+      vars:
+        ansible_user: REPLACE_WITH_SSH_USER
       hosts:
         armbox:
           ansible_host: "REPLACE_WITH_ARMBOX_TAILNET_IP"

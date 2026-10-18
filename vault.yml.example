@@ -1,6 +1,8 @@
 # Copy to vault.yml, fill in, then encrypt:
 #
 #   cp vault.yml.example vault.yml
+#   openssl rand -hex 32          # for shared_secret
+#   $EDITOR vault.yml
 #   ansible-vault encrypt vault.yml
 #
 # vault.yml is gitignored. Losing the vault password means both Command Code
@@ -10,9 +12,16 @@
 vault_data:
   # Shared by all three hosts. It is what the router demands from opencode and
   # what it sends to each bridge. Generate with: openssl rand -hex 32
+  #
+  # It has one other use: the same string also goes into
+  # ~/.config/opencode/cc-bridge.key so opencode can authenticate.
   shared_secret: "REPLACE_WITH_RANDOM_HEX"
 
-  # One key per host. Must match the hostname keys in inventory.yml.
+  # One Command Code key per bridge host. The names must match the hostnames
+  # in inventory.yml exactly, because the template indexes by inventory_hostname.
+  #
+  # Keys look like user_... and come from the browser login. Capture one at a
+  # time -- the next login overwrites the previous key on disk.
   cc_keys:
     oracle1: "REPLACE_WITH_USER_KEY"
     oracle2: "REPLACE_WITH_USER_KEY"
