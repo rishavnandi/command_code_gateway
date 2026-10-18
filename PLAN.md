@@ -61,10 +61,10 @@ all:
   children:
     cc_bridge:
       hosts:
-        oracle1:
-          ansible_host: <oracle1-tailnet-ip>
-        oracle2:
-          ansible_host: <oracle2-tailnet-ip>
+        heimdall:
+          ansible_host: <heimdall-tailnet-ip>
+        thor:
+          ansible_host: <thor-tailnet-ip>
     cc_router:
       hosts:
         armbox:
@@ -78,8 +78,8 @@ third account is a dict entry rather than another group-vars file:
 vault_data:
   shared_secret: "<random>"
   cc_keys:
-    oracle1: "user_..."
-    oracle2: "user_..."
+    heimdall: "user_..."
+    thor: "user_..."
 ```
 
 Create it with `ansible-vault create vault.yml`, then edit. Every task that
@@ -208,7 +208,7 @@ clients, and what it sends to each backend.
 ```
 HOST=0.0.0.0
 BRIDGE_API_KEY={{ vault_data.shared_secret }}
-COMMANDCODE_ROUTER_BACKENDS=vps1=http://<oracle1-tailnet-ip>:9992,vps2=http://<oracle2-tailnet-ip>:9992
+COMMANDCODE_ROUTER_BACKENDS=heimdall=http://<heimdall-tailnet-ip>:9992,thor=http://<thor-tailnet-ip>:9992
 ```
 
 ## Capture the keys
@@ -367,7 +367,7 @@ unverified, but there is no longer an obvious field to do it with.
   image. Left alone, both accounts would send the identical slug from two IPs,
   which is the one correlating signal this layout otherwise removes. The
   compose file sets `working_dir: /workspace/{{ inventory_hostname }}`, giving
-  each host `oracle1` and `oracle2` respectively. Verified: only the basename is
+  each host `heimdall` and `thor` respectively. Verified: only the basename is
   used, and the directory does not need to exist.
 
 - **1.84-era headers are conditionally sent.** Comparing the published CLI at
@@ -381,9 +381,9 @@ unverified, but there is no longer an obvious field to do it with.
   slug is now distinct, the IPs are distinct, nothing else links them), whether
   it rejects a version too *new* as well as too old, whether a second login
   invalidates the first account's session, and whether `docker compose` on
-  Oracle Linux handles `network_mode: host` as expected.
+  Ubuntu 24.04 handles `network_mode: host` as expected.
 - **The only unproven step left in the build is the build.** `npm run verify`
-  on 1 vCPU with an 8GB swapfile has not been attempted. Run `--limit oracle1`
+  on 1 vCPU with an 8GB swapfile has not been attempted. Run `--limit heimdall`
   first; the version pin is inside the fleet play precisely so that limit does
   not skip it.
 - **Terms.** Two $1 accounts to double throughput is a question for Command

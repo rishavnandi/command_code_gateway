@@ -22,10 +22,10 @@
 
   pre_tasks:
     # These run once, on the controller. Deliberately NOT a separate localhost
-    # play: `--limit oracle1` would match no hosts for that play and skip it
+    # play: `--limit heimdall` would match no hosts for that play and skip it
     # silently, leaving cc_cli_version undefined and the env file empty.
     #
-    # The Oracle hosts have no npm, and a delegated task is skipped entirely
+    # The hosts have no npm, and a delegated task is skipped entirely
     # when its host is unreachable, so run_once plus delegate_to keeps this
     # working even with one box down.
     - name: read the published Command Code CLI version

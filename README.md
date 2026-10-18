@@ -11,8 +11,7 @@ Full design and rationale in [PLAN.md](PLAN.md).
 
 Per host the playbook:
 
-1. installs Docker CE, compose and buildx (Oracle Linux, Ubuntu/Debian and
-   RHEL-family all handled)
+1. installs Docker CE, compose and buildx
 2. syncs the upstream bridge source at a pinned release tag
 3. renders an env file from Ansible Vault, mode 0600
 4. builds the image and starts the container under compose
@@ -88,7 +87,7 @@ re-doing step 2 from scratch.
 
 ```sh
 ansible all -m ping
-ansible-playbook site.yml --limit oracle1 --check --ask-become-pass
+ansible-playbook site.yml --limit heimdall --check --ask-become-pass
 ```
 
 The version pin lives inside the fleet play specifically so `--limit` does not
@@ -162,7 +161,7 @@ curl -sS -H "Authorization: Bearer $(cat ~/.config/opencode/cc-bridge.key)" \
 ```
 
 Then a real turn in opencode on `cc/deepseek/deepseek-v4.1-flash`, and stop one
-bridge (`ansible oracle1 -a 'docker compose -f /opt/cc/bridge/compose.yml stop'`)
+bridge (`ansible heimdall -a 'docker compose -f /opt/cc/bridge/compose.yml stop'`)
 to confirm the other still serves.
 
 ## Maintenance
