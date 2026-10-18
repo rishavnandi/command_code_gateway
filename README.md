@@ -105,24 +105,22 @@ this setup has never tested. Expect several minutes, not seconds.
 
 ### 6. Wire opencode up
 
-The key file lives beside the config in your dotfiles repo and is symlinked
-into place by `auto_config.sh`, like `opencode.jsonc` and `AGENTS.md` already
-are. The repo is public, so `.gitignore` now excludes `*.key` — do not skip
-that, or the secret gets committed.
+Write the secret once, by hand. Nothing generates it — `auto_config.sh` only
+creates the *symlink* to it, so the file has to exist first or the linker skips
+it with a warning:
 
 ```sh
 umask 077
 printf '%s' '<shared_secret>' > ~/data/projects/dotfiles/opencode/cc-bridge.key
-ln -sfn ~/data/projects/dotfiles/opencode/cc-bridge.key \
-        ~/.config/opencode/cc-bridge.key
+~/data/projects/dotfiles/auto_config.sh          # creates the symlink
 ```
 
-To make `auto_config.sh` create that link on future machines, add to its
-`DOTFILE_LINKS` array, beside the `opencode.jsonc` entry:
+That is the whole manual step. The entry is already in `DOTFILE_LINKS`, and the
+dotfiles repo already gitignores `*.key`, so the secret stays out of a public
+repo without you doing anything more.
 
-```sh
-"$DOTFILES_DIR/opencode/cc-bridge.key|$HOME/.config/opencode/cc-bridge.key"
-```
+Do this on any other machine too — the key file is per-machine, not something
+the repo carries.
 
 Then add the provider to the tracked `opencode.jsonc` and restart opencode.
 It resolves the key at runtime, so the config stays free of the secret:
@@ -133,7 +131,7 @@ It resolves the key at runtime, so the config stays free of the secret:
     "name": "Command Code (pooled)",
     "package": "@opencode/ai/providers/openai-compatible",
     "settings": {
-      "baseURL": "http://<armbox-tailnet-ip>:9992/v1",
+      "baseURL": "http://100.98.210.60:9992/v1",
       "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
       "encoding": "none"
     },
@@ -155,9 +153,9 @@ Without it you get `Model unavailable: cc/<anything>`.
 ### 7. Prove it works
 
 ```sh
-curl -sS http://<armbox-tailnet-ip>:9992/health
+curl -sS http://100.98.210.60:9992/health
 curl -sS -H "Authorization: Bearer $(cat ~/.config/opencode/cc-bridge.key)" \
-  http://<armbox-tailnet-ip>:9992/v1/models | head -c 400
+  http://100.98.210.60:9992/v1/models | head -c 400
 ```
 
 Then a real turn in opencode on `cc/deepseek/deepseek-v4.1-flash`, and stop one
