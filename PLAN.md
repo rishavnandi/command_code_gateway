@@ -326,10 +326,11 @@ parked until its real reset time. Nothing breaks; the other account still serves
 everything. It just chatters. A single container with both keys parks it
 properly, at the cost of putting both accounts on one IP.
 
-**What survives the split:** the bridge sends `x-project-slug` derived from the
-working directory, so both accounts working the same repo present the same
-slug. Separate IPs, shared slug. Whether Command Code cares is undocumented and
-unverified.
+**What survives the split:** nothing structural. Distinct IPs, and now distinct
+`x-project-slug` values because the compose template sets a per-host
+`working_dir`. There is no shared literal left for an operator to correlate on,
+short of timing. Whether Command Code correlates anyway is undocumented and
+unverified, but there is no longer an obvious field to do it with.
 
 ## Risks
 
@@ -359,10 +360,32 @@ unverified.
   bridge release. What you lose is its `contextWindow` and pricing, which fall
   back to a generic custom entry — set them in the bridge's dashboard config if
   that matters. Verified against the loader.
-- **Not verified:** whether Command Code correlates accounts by source IP,
-  whether it rejects a version too *new* as well as too old, whether a second
-  login invalidates the first account's session, and whether
-  `docker compose` on Oracle Linux handles `network_mode: host` as expected.
+
+- **`x-project-slug` is a fixed literal, and that is now handled.** The bridge
+  derives it from `processCwd()`, and `server.ts` never passes a `cwd`, so it
+  is always the basename of the container's working directory — `/app` in the
+  image. Left alone, both accounts would send the identical slug from two IPs,
+  which is the one correlating signal this layout otherwise removes. The
+  compose file sets `working_dir: /workspace/{{ inventory_hostname }}`, giving
+  each host `oracle1` and `oracle2` respectively. Verified: only the basename is
+  used, and the directory does not need to exist.
+
+- **1.84-era headers are conditionally sent.** Comparing the published CLI at
+  1.84.0 against what the 1.74-era bridge sends: `x-cli-surface` and
+  `x-oss-primary-provider` are new, but both are spread conditionally
+  (`...e.cliSurface ? {} : {}`), and the CLI does not set them either. The
+  unconditional set — `x-cli-environment`, `x-command-code-version`,
+  `x-project-slug`, `x-taste-learning`, `x-session-id` — is what the bridge
+  already sends. No missing required header.
+- **Not verified:** whether Command Code correlates accounts by source IP (the
+  slug is now distinct, the IPs are distinct, nothing else links them), whether
+  it rejects a version too *new* as well as too old, whether a second login
+  invalidates the first account's session, and whether `docker compose` on
+  Oracle Linux handles `network_mode: host` as expected.
+- **The only unproven step left in the build is the build.** `npm run verify`
+  on 1 vCPU with an 8GB swapfile has not been attempted. Run `--limit oracle1`
+  first; the version pin is inside the fleet play precisely so that limit does
+  not skip it.
 - **Terms.** Two $1 accounts to double throughput is a question for Command
   Code. The bridge README states it does not bypass account limits and that
   terms still apply.

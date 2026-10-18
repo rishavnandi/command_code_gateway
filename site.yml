@@ -10,22 +10,32 @@
 # The only thing you do by hand is move cc_bridge_tag in
 # group_vars/all.yml, and only when you want a newer bridge.
 
-- name: discover versions on the controller
-  hosts: localhost
-  connection: local
+- name: command code bridge fleet
+  hosts: all
+  become: true
   gather_facts: false
 
-  tasks:
-    # The Oracle hosts have no npm and no guarantee of git history, and these
-    # two lookups describe the controller's view of upstream, not each VPS's.
-    # A separate play rather than delegate_to inside the fleet play: a
-    # delegated task is still skipped when its host is unreachable, so one
-    # dead VPS would silently skip the version probe for the entire fleet.
+  # Without this, vault_data is undefined and the env-render task fails. The
+  # pre_task below checks for the file first so the error names the fix.
+  vars_files:
+    - vault.yml
+
+  pre_tasks:
+    # These run once, on the controller. Deliberately NOT a separate localhost
+    # play: `--limit oracle1` would match no hosts for that play and skip it
+    # silently, leaving cc_cli_version undefined and the env file empty.
+    #
+    # The Oracle hosts have no npm, and a delegated task is skipped entirely
+    # when its host is unreachable, so run_once plus delegate_to keeps this
+    # working even with one box down.
     - name: read the published Command Code CLI version
       ansible.builtin.command: npm view command-code version
       register: cc_probe
       changed_when: false
       check_mode: false
+      delegate_to: localhost
+      become: false
+      run_once: true
 
     - name: list upstream bridge releases
       ansible.builtin.command:
@@ -39,8 +49,11 @@
       register: cc_remote_tags
       changed_when: false
       check_mode: false
+      delegate_to: localhost
+      become: false
+      run_once: true
 
-    - name: record what upstream currently publishes
+    - name: pin the versions
       ansible.builtin.set_fact:
         cc_cli_version: "{{ cc_probe.stdout | trim }}"
         # --sort=-v:refname is git's own version sort. A lexical sort would
@@ -55,24 +68,8 @@
           Edit group_vars/all.yml to move. Not automatic on purpose.
       when: cc_bridge_tag != cc_bridge_latest
 
-- name: command code bridge fleet
-  hosts: all
-  become: true
-  gather_facts: true
-
-  # Without this, vault_data is undefined and the env-render task fails. The
-  # pre_task below checks for the file first so the error names the fix.
-  vars_files:
-    - vault.yml
-
-  vars:
-    cc_cli_version: "{{ hostvars['localhost']['cc_cli_version'] }}"
-    cc_bridge_latest: "{{ hostvars['localhost']['cc_bridge_latest'] }}"
-
-  pre_tasks:
-    # delegate_to + run_once: the vault lives on the controller. Without the
-    # delegation this stats a path on the VPS, finds nothing, and aborts every
-    # run with the setup message.
+    # The vault lives on the controller. Without the delegation this stats a
+    # path on the VPS, finds nothing, and aborts every run.
     - name: check the vault exists
       ansible.builtin.stat:
         path: "{{ playbook_dir }}/vault.yml"
@@ -89,14 +86,14 @@
           "ansible-vault encrypt vault.yml".
       when: not cc_vault.stat.exists
 
-  tasks:
-
     - name: fail early if a prerequisite is missing
       ansible.builtin.command: "{{ item }} --version"
       loop:
         - docker
         - git
       changed_when: false
+
+  tasks:
 
     # Built as id=url pairs, which is the format COMMANDCODE_ROUTER_BACKENDS
     # expects. A plain Jinja loop rather than regex_replace: the backreference

@@ -109,5 +109,5 @@ password is load-bearing for both accounts — store it in a password manager.
 - The router cools a failed backend for a flat 60s and ignores `Retry-After`, so
   an exhausted account is re-probed each minute rather than parked until its
   window resets. Harmless with two accounts; noisy.
-- Both accounts send the same `x-project-slug` for the same repo. Separate IPs,
-  shared slug.
+- `x-project-slug` now differs per host (`working_dir` in the compose
+  template), so the two accounts do not share a slug.

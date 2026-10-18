@@ -9,6 +9,12 @@ services:
     # publishing entirely, and HOST=0.0.0.0 in the env file does the binding.
     network_mode: host
     env_file: ./{{ cc_role }}.env
+    # The bridge sends x-project-slug taken from the process working directory,
+    # which is /app in the image. Two accounts would therefore present the same
+    # slug from two IPs — the one correlating signal this layout otherwise
+    # removes. A per-host directory gives each account a distinct slug. It does
+    # not need to exist; only its basename is sent.
+    working_dir: /workspace/{{ inventory_hostname }}
     environment:
       # Without this the dashboard's restart button answers
       # restart_requested:false instead of restarting, because the process
