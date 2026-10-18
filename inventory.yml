@@ -1,29 +1,34 @@
-# Replace every REPLACE_WITH_* value before the first run.
+# Filled in from the live tailnet. Re-verify with `tailscale status` if a
+# machine is ever rebuilt or re-imaged.
 #
-# The playbook builds COMMANDCODE_ROUTER_BACKENDS from the cc_bridge group, so
-# adding a third account is: add a host here, add its key to vault.yml.
+# Nodes, as they actually are (2026-10-18):
 #
-# ansible_user is set per group so `become: true` has something to sudo as.
-# Ubuntu images default to "ubuntu", Oracle Linux images to "opc" — change
-# these if yours differ. If SSH already works via ~/.ssh/config you can drop
-# the ansible_* lines entirely and Ansible will use your config.
+#   loki     100.98.210.60    aarch64  23.4G RAM  4 vCPU   Ubuntu 24.04
+#   heimdall 100.96.165.104   x86_64    0.9G RAM  2 vCPU   Ubuntu 24.04  8G swap
+#   thor     100.89.69.71     x86_64    0.9G RAM  2 vCPU   Ubuntu 24.04  8G swap
+#
+# loki is the only one with headroom, so it runs the router. It could also host
+# a bridge if a third account ever appears.
+#
+# sudo on all three needs a password, so run with --ask-become-pass.
+# SSH goes through Tailscale SSH, which is why ansible_user is "opc".
 
 all:
   children:
 
     cc_bridge:
-      # One Go account per host. Each therefore egresses from its own IP.
+      # One Go account per host, so each egresses from its own IP.
       vars:
-        ansible_user: REPLACE_WITH_SSH_USER
+        ansible_user: opc
       hosts:
-        oracle1:
-          ansible_host: "REPLACE_WITH_ORACLE1_TAILNET_IP"
-        oracle2:
-          ansible_host: "REPLACE_WITH_ORACLE2_TAILNET_IP"
+        heimdall:
+          ansible_host: 100.96.165.104
+        thor:
+          ansible_host: 100.89.69.71
 
     cc_router:
       vars:
-        ansible_user: REPLACE_WITH_SSH_USER
+        ansible_user: opc
       hosts:
-        armbox:
-          ansible_host: "REPLACE_WITH_ARMBOX_TAILNET_IP"
+        loki:
+          ansible_host: 100.98.210.60

@@ -24,15 +24,19 @@ when a newer bridge release exists, without following it.
 
 ## Run it
 
-### 1. Fill in the inventory
+### 1. Check the inventory
 
-```sh
-$EDITOR inventory.yml
-```
+Already filled in from the live tailnet:
 
-Replace the three `REPLACE_WITH_*_TAILNET_IP` values and the two
-`REPLACE_WITH_SSH_USER` ones. The hostnames `oracle1`, `oracle2` and `armbox`
-matter — they key the vault and the per-host project slug.
+| host | tailnet IP | hardware | role |
+| --- | --- | --- | --- |
+| `loki` | 100.98.210.60 | aarch64, 23.4G RAM, 4 vCPU | router |
+| `heimdall` | 100.96.165.104 | x86_64, 0.9G RAM, 8G swap | bridge + key A |
+| `thor` | 100.89.69.71 | x86_64, 0.9G RAM, 8G swap | bridge + key B |
+
+All three are Ubuntu 24.04, SSH as `opc` over Tailscale SSH. Re-run
+`tailscale status` if a box is ever rebuilt. The hostnames key the vault and
+the per-host project slug, so renaming one means editing both.
 
 ### 2. Get the two Command Code keys
 
@@ -102,14 +106,27 @@ this setup has never tested. Expect several minutes, not seconds.
 
 ### 6. Wire opencode up
 
-Write the same `shared_secret` to a local key file:
+The key file lives beside the config in your dotfiles repo and is symlinked
+into place by `auto_config.sh`, like `opencode.jsonc` and `AGENTS.md` already
+are. The repo is public, so `.gitignore` now excludes `*.key` — do not skip
+that, or the secret gets committed.
 
 ```sh
 umask 077
-printf '%s' '<shared_secret>' > ~/.config/opencode/cc-bridge.key
+printf '%s' '<shared_secret>' > ~/data/projects/dotfiles/opencode/cc-bridge.key
+ln -sfn ~/data/projects/dotfiles/opencode/cc-bridge.key \
+        ~/.config/opencode/cc-bridge.key
 ```
 
-Add to `~/.config/opencode/opencode.jsonc`, then restart opencode:
+To make `auto_config.sh` create that link on future machines, add to its
+`DOTFILE_LINKS` array, beside the `opencode.jsonc` entry:
+
+```sh
+"$DOTFILES_DIR/opencode/cc-bridge.key|$HOME/.config/opencode/cc-bridge.key"
+```
+
+Then add the provider to the tracked `opencode.jsonc` and restart opencode.
+It resolves the key at runtime, so the config stays free of the secret:
 
 ```jsonc
 "providers": {
@@ -128,8 +145,9 @@ Add to `~/.config/opencode/opencode.jsonc`, then restart opencode:
 }
 ```
 
-`~/.config/opencode/` is a plain local directory whose config files are
-symlinks into your dotfiles repo, so that key file is never tracked.
+The key file is reachable two ways — the symlink in `~/.config/opencode/` and
+the real file in dotfiles. Only the symlink is harmless to leak, so the
+gitignore entry above is doing the real work.
 
 **The `models` block is required.** opencode does not call a custom provider's
 `/v1/models` — discovery is special-cased for Ollama, LM Studio and vLLM only.
@@ -174,8 +192,9 @@ current published version. No rebuild.
 
 ## Secrets
 
-`vault.yml` is gitignored. Only `vault.yml.example` is committed.
-`~/.config/opencode/cc-bridge.key` lives outside any repo.
+`vault.yml` is gitignored; only `vault.yml.example` is committed.
+`opencode/cc-bridge.key` in dotfiles is covered by `*.key` in that repo's
+`.gitignore`, which is required because the repo is public.
 
 ## Requirements
 

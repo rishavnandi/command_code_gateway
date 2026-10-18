@@ -13,15 +13,16 @@ vault_data:
   # Shared by all three hosts. It is what the router demands from opencode and
   # what it sends to each bridge. Generate with: openssl rand -hex 32
   #
-  # It has one other use: the same string also goes into
-  # ~/.config/opencode/cc-bridge.key so opencode can authenticate.
+  # The same string also goes into the opencode key file, so opencode can
+  # authenticate. See README step 6.
   shared_secret: "REPLACE_WITH_RANDOM_HEX"
 
-  # One Command Code key per bridge host. The names must match the hostnames
-  # in inventory.yml exactly, because the template indexes by inventory_hostname.
+  # One Command Code key per bridge host. The names must match the hostnames in
+  # inventory.yml exactly -- the template indexes by inventory_hostname, and a
+  # typo here fails at render time rather than silently.
   #
   # Keys look like user_... and come from the browser login. Capture one at a
-  # time -- the next login overwrites the previous key on disk.
+  # time: the next login overwrites the previous one on disk.
   cc_keys:
-    oracle1: "REPLACE_WITH_USER_KEY"
-    oracle2: "REPLACE_WITH_USER_KEY"
+    heimdall: "REPLACE_WITH_USER_KEY"
+    thor: "REPLACE_WITH_USER_KEY"
