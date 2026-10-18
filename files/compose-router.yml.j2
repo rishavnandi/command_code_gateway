@@ -9,3 +9,14 @@ services:
     env_file: ./{{ cc_role }}.env
     # Same image as the bridges, different entrypoint.
     command: ["node", "dist/router-index.js"]
+    environment:
+      COMMANDCODE_BRIDGE_RESTART_MODE: exit
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ cc_service_port }}/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3

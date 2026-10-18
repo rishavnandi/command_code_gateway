@@ -10,62 +10,23 @@
 # The only thing you do by hand is move cc_bridge_tag in
 # group_vars/all.yml, and only when you want a newer bridge.
 
-- name: command code bridge fleet
-  hosts: all
-  become: true
-  gather_facts: true
-
-  # Without this, vault_data is undefined and the env-render task fails. The
-  # pre_task below checks for the file first so the error names the fix.
-  vars_files:
-    - vault.yml
-
-  pre_tasks:
-    - name: check the vault exists
-      ansible.builtin.stat:
-        path: "{{ playbook_dir }}/vault.yml"
-      register: cc_vault
-
-    - name: explain how to create the vault
-      ansible.builtin.fail:
-        msg: >-
-          {{ playbook_dir }}/vault.yml not found. Create it once with
-          "cp vault.yml.example vault.yml", fill it in, then
-          "ansible-vault encrypt vault.yml".
-      when: not cc_vault.stat.exists
+- name: discover versions on the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
 
   tasks:
-
-    - name: fail early with a clear message if docker is missing
-      ansible.builtin.command: docker --version
-      changed_when: false
-
-    # Read on the controller, because the Oracle hosts have no npm — only the
-    # container image does. This is what replaces a cron job: the pin refreshes
-    # when you run the playbook, not on a schedule.
+    # The Oracle hosts have no npm and no guarantee of git history, and these
+    # two lookups describe the controller's view of upstream, not each VPS's.
+    # A separate play rather than delegate_to inside the fleet play: a
+    # delegated task is still skipped when its host is unreachable, so one
+    # dead VPS would silently skip the version probe for the entire fleet.
     - name: read the published Command Code CLI version
       ansible.builtin.command: npm view command-code version
       register: cc_probe
       changed_when: false
       check_mode: false
-      delegate_to: localhost
-      # become is inherited from the play, and sudo on the controller would
-      # either prompt or fail. This task runs on your machine, not the VPS.
-      become: false
 
-    - name: pin the CLI version
-      ansible.builtin.set_fact:
-        cc_cli_version: "{{ cc_probe.stdout | trim }}"
-
-    # Report upstream's newest bridge release, but do not follow it. The CLI
-    # version above is data — a version floor only ever rejects something too
-    # old, so reporting newer is always safe. The bridge tag is code: a new
-    # release can change the wire protocol, the model catalog or the router's
-    # failover behaviour, and silently rebuilding different code on every run
-    # leaves you with no rollback. So this warns instead of acting.
-    #
-    # --sort=-v:refname is git's own version sort. A plain lexical sort would
-    # rank v1.100.0 below v1.74.0.d, which is a bug waiting for two digits.
     - name: list upstream bridge releases
       ansible.builtin.command:
         argv:
@@ -78,11 +39,12 @@
       register: cc_remote_tags
       changed_when: false
       check_mode: false
-      delegate_to: localhost
-      become: false
 
-    - name: newest upstream bridge release
+    - name: record what upstream currently publishes
       ansible.builtin.set_fact:
+        cc_cli_version: "{{ cc_probe.stdout | trim }}"
+        # --sort=-v:refname is git's own version sort. A lexical sort would
+        # rank v1.100.0 below v1.74.0.d, a bug waiting for two digits.
         cc_bridge_latest: "{{ cc_remote_tags.stdout_lines[0].split('refs/tags/') | last }}"
 
     - name: report when the pin is behind upstream
@@ -92,6 +54,49 @@
           cc_bridge_tag is pinned to {{ cc_bridge_tag }}.
           Edit group_vars/all.yml to move. Not automatic on purpose.
       when: cc_bridge_tag != cc_bridge_latest
+
+- name: command code bridge fleet
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Without this, vault_data is undefined and the env-render task fails. The
+  # pre_task below checks for the file first so the error names the fix.
+  vars_files:
+    - vault.yml
+
+  vars:
+    cc_cli_version: "{{ hostvars['localhost']['cc_cli_version'] }}"
+    cc_bridge_latest: "{{ hostvars['localhost']['cc_bridge_latest'] }}"
+
+  pre_tasks:
+    # delegate_to + run_once: the vault lives on the controller. Without the
+    # delegation this stats a path on the VPS, finds nothing, and aborts every
+    # run with the setup message.
+    - name: check the vault exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/vault.yml"
+      register: cc_vault
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: explain how to create the vault
+      ansible.builtin.fail:
+        msg: >-
+          {{ playbook_dir }}/vault.yml not found. Create it once with
+          "cp vault.yml.example vault.yml", fill it in, then
+          "ansible-vault encrypt vault.yml".
+      when: not cc_vault.stat.exists
+
+  tasks:
+
+    - name: fail early if a prerequisite is missing
+      ansible.builtin.command: "{{ item }} --version"
+      loop:
+        - docker
+        - git
+      changed_when: false
 
     # Built as id=url pairs, which is the format COMMANDCODE_ROUTER_BACKENDS
     # expects. A plain Jinja loop rather than regex_replace: the backreference
@@ -108,6 +113,9 @@
         version: "{{ cc_bridge_tag }}"
         force: true
 
+    # The upstream checkout ships its own docker-compose.yml and .env.example.
+    # Nothing here reads them, but `docker compose` in that directory would
+    # pick the wrong file and the wrong env, so keep ours in its own tree.
     - name: create the service directory
       ansible.builtin.file:
         path: "{{ cc_service_dir }}/{{ cc_role }}"
@@ -138,18 +146,20 @@
       poll: 15
       changed_when: true
 
-    - name: confirm the container is running
-      community.docker.docker_container_info:
-        name: "cc-{{ cc_role }}"
-      register: cc_container
+    # docker_container_info needs the Docker Python SDK, which a fresh VPS does
+    # not have. `docker inspect` is already present wherever the build ran.
+    - name: inspect the container
+      ansible.builtin.command:
+        argv: [docker, inspect, "-f", "{{ '{{' }}.State.Running{{ '}}' }}", "cc-{{ cc_role }}"]
+      register: cc_inspect
+      changed_when: false
+      failed_when: cc_inspect.rc not in [0, 1]
 
     - name: fail if the container is missing or not running
       ansible.builtin.fail:
         msg: >-
           cc-{{ cc_role }} is not running on {{ inventory_hostname }}.
-          Its per-key window meter and recent errors are at
-          http://{{ ansible_host }}:{{ cc_service_port }}/dashboard/
+          Read "docker compose logs" in {{ cc_service_dir }}/{{ cc_role }},
+          or the dashboard at http://{{ ansible_host }}:{{ cc_service_port }}/dashboard/
           for a bridge, or /health for the router.
-      # `exists` short-circuits, so the second clause is only read when the
-      # container does exist. A container that never started also fails this.
-      when: not cc_container.exists or not cc_container.container.State.Running
+      when: cc_inspect.rc != 0 or 'true' not in cc_inspect.stdout

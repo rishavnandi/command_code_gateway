@@ -9,3 +9,17 @@ services:
     # publishing entirely, and HOST=0.0.0.0 in the env file does the binding.
     network_mode: host
     env_file: ./{{ cc_role }}.env
+    environment:
+      # Without this the dashboard's restart button answers
+      # restart_requested:false instead of restarting, because the process
+      # refuses to exit when it cannot tell it is supervised.
+      COMMANDCODE_BRIDGE_RESTART_MODE: exit
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:{{ cc_service_port }}/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
