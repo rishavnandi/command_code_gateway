@@ -105,25 +105,8 @@ this setup has never tested. Expect several minutes, not seconds.
 
 ### 6. Wire opencode up
 
-Write the secret once, by hand. Nothing generates it — `auto_config.sh` only
-creates the *symlink* to it, so the file has to exist first or the linker skips
-it with a warning:
-
-```sh
-umask 077
-printf '%s' '<shared_secret>' > ~/data/projects/dotfiles/opencode/cc-bridge.key
-~/data/projects/dotfiles/auto_config.sh          # creates the symlink
-```
-
-That is the whole manual step. The entry is already in `DOTFILE_LINKS`, and the
-dotfiles repo already gitignores `*.key`, so the secret stays out of a public
-repo without you doing anything more.
-
-Do this on any other machine too — the key file is per-machine, not something
-the repo carries.
-
-Then add the provider to the tracked `opencode.jsonc` and restart opencode.
-It resolves the key at runtime, so the config stays free of the secret:
+Add the provider to `opencode.jsonc` and restart opencode. You do this when you
+actually start using the gateway, not as part of the deploy.
 
 ```jsonc
 "providers": {
@@ -132,7 +115,7 @@ It resolves the key at runtime, so the config stays free of the secret:
     "package": "@opencode/ai/providers/openai-compatible",
     "settings": {
       "baseURL": "http://100.98.210.60:9992/v1",
-      "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
+      "apiKey": "<shared_secret from vault.yml>",
       "encoding": "none"
     },
     "models": {
@@ -142,9 +125,13 @@ It resolves the key at runtime, so the config stays free of the secret:
 }
 ```
 
-The key file is reachable two ways — the symlink in `~/.config/opencode/` and
-the real file in dotfiles. Only the symlink is harmless to leak, so the
-gitignore entry above is doing the real work.
+`apiKey` must be the same value as `shared_secret` in `vault.yml` — it is what
+the router demands from opencode and what it sends to each bridge.
+
+`~/.config/opencode/opencode.jsonc` is a symlink into the dotfiles repo, so
+whatever you put here is what that repo would carry. If you would rather not
+have the secret in a tracked file, `{file:~/.config/opencode/cc-bridge.key}`
+works instead, and the config resolves it at runtime.
 
 **The `models` block is required.** opencode does not call a custom provider's
 `/v1/models` — discovery is special-cased for Ollama, LM Studio and vLLM only.
@@ -154,7 +141,7 @@ Without it you get `Model unavailable: cc/<anything>`.
 
 ```sh
 curl -sS http://100.98.210.60:9992/health
-curl -sS -H "Authorization: Bearer $(cat ~/.config/opencode/cc-bridge.key)" \
+curl -sS -H "Authorization: Bearer <shared_secret>" \
   http://100.98.210.60:9992/v1/models | head -c 400
 ```
 
@@ -189,9 +176,12 @@ current published version. No rebuild.
 
 ## Secrets
 
-`vault.yml` is gitignored; only `vault.yml.example` is committed.
-`opencode/cc-bridge.key` in dotfiles is covered by `*.key` in that repo's
-`.gitignore`, which is required because the repo is public.
+`vault.yml` is gitignored; only `vault.yml.example` is committed, and it holds
+the real per-account keys.
+
+The shared secret also has to reach opencode. Inlining it in `opencode.jsonc`
+puts it in the dotfiles repo, which is public — fine if you replace it with a
+placeholder before pushing, so that is your call to make per machine.
 
 ## Requirements
 

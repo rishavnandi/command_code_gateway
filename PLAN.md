@@ -250,23 +250,9 @@ rather than assuming the mirror still fires. The comparison above is the check.
 2. the credential the router presents to each bridge
 3. each bridge's own `BRIDGE_API_KEY`
 
-One string, all three. opencode reads it from a local file rather than an
-environment variable, using the same `{file:...}` substitution already used for
-Context7 in this config. No service restart, no `opencode service set env`, and
-the config stays in the dotfiles repo where it belongs.
-
-Write the secret to `~/.config/opencode/cc-bridge.key`, mode 0600. That
-directory is a plain local directory whose files are symlinks into the dotfiles
-repo, so a real file there is never tracked — no `.gitignore` needed.
-
-```sh
-chmod 600 ~/.config/opencode/cc-bridge.key
-```
-
-Then add the provider beside the existing `plugins` and `mcp` in
-`~/.config/opencode/opencode.jsonc`, which is a symlink to
-`~/data/projects/dotfiles/opencode.jsonc`. Take model IDs from the router's
-`/v1/models` rather than from this file:
+One string, all three. Add the provider beside the existing `plugins` and `mcp`
+in `~/.config/opencode/opencode.jsonc`, which is a symlink to
+`~/data/projects/dotfiles/opencode.jsonc`:
 
 ```jsonc
 "providers": {
@@ -274,8 +260,8 @@ Then add the provider beside the existing `plugins` and `mcp` in
     "name": "Command Code (pooled)",
     "package": "@opencode/ai/providers/openai-compatible",
     "settings": {
-      "baseURL": "http://<arm-tailnet-ip>:9992/v1",
-      "apiKey": "{file:~/.config/opencode/cc-bridge.key}",
+      "baseURL": "http://100.98.210.60:9992/v1",
+      "apiKey": "<shared_secret from vault.yml>",
       "encoding": "none"
     },
     "models": {
@@ -285,36 +271,18 @@ Then add the provider beside the existing `plugins` and `mcp` in
 }
 ```
 
+That file is tracked in the dotfiles repo, which is public, so the value in it
+is also whatever that repo would carry. Replacing it with a placeholder before
+pushing is the intended workflow; `{file:...}` is available if you would rather
+never have it in a tracked file at all.
+
+**The `models` block is required.** opencode does not call the router's
+`/v1/models`: discovery is special-cased for Ollama, LM Studio and vLLM, and the
+docs say every other compatible endpoint must list models explicitly. Without
+it the provider exists but nothing is selectable, surfacing as
+`Model unavailable: cc/<anything>`.
+
 `encoding: "none"` because gateways reject compressed bodies.
-
-**The `models` block is required. opencode will not call the router's
-`/v1/models`.** Discovery is special-cased for three runtimes only — Ollama
-(`/api/tags`), LM Studio and vLLM (`/v1/models`). For anything else the docs
-say to "use the custom provider recipe and list its models explicitly". A
-custom provider with an empty or missing `models` map exists but has nothing
-selectable, which surfaces as `Model unavailable: cc/<anything>`.
-
-List only the models you actually use rather than all 85 the bridge serves.
-
-One failure mode to know: a missing or empty key file substitutes an empty
-string, so opencode sends `Authorization: Bearer ` and the router answers 401.
-If the provider authenticates as nobody, check that the file exists before
-suspecting the tailnet.
-
-## Maintenance
-
-Two paths, neither scheduled. Both start with `ansible-playbook site.yml`.
-
-**A 403 names a version.** Upstream raised its floor. Edit `cc_bridge_tag` or
-let the probe task refresh the pin, re-run the playbook. The compose step
-recreates the containers. No rebuild unless you also moved the tag.
-
-**A new bridge release, a bug, or models you want.** Set
-`cc_bridge_tag` to the newer tag, re-run. The clone updates, the image
-rebuilds, containers recreate. Rollback is setting the tag back.
-
-The playbook is idempotent, so re-running it with nothing changed is safe and a
-no-op except for the image rebuild.
 
 ## Tradeoffs
 
